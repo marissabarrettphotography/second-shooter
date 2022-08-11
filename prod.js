@@ -15,3 +15,7 @@
         origSend.apply(this, arguments);
     };
 })();
+
+console.log(document.cookie);
+
+console.log(_pt$.userInfo);
