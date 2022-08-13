@@ -4,98 +4,86 @@ function uuidv4() {
   );
 }
 
+function sendData(type, data) {
+  data.type = type;
+  data.sessionId = sessionId;
+  console.log(data);
+  console.log(JSON.stringify(data).length + ' bytes')
+}
+
+const sessionId = uuidV4();
 const xhrMap = new Map();
 
-(function () {
-  const origOpen = XMLHttpRequest.prototype.open;
-  XMLHttpRequest.prototype.open = function () {
-    this.xhrId = uuidv4();
+const origOpen = XMLHttpRequest.prototype.open;
+XMLHttpRequest.prototype.open = function () {
+  this.xhrId = uuidv4();
 
-    const xhrData = {};
-    xhrData.method = arguments[0];
-    xhrData.url = arguments[1];
-    xhrData.async = arguments[2];
-    xhrData.user = arguments[3];
-    xhrData.password = arguments[4];
+  const xhrData = {};
 
-    xhrMap.set(this.xhrId, xhrData);
+  xhrData.request = {};
+  xhrData.request.method = arguments[0];
+  xhrData.request.url = arguments[1];
+  xhrData.request.async = arguments[2];
+  xhrData.request.user = arguments[3];
+  xhrData.request.password = arguments[4];
 
-    this.addEventListener('load', function () {
-      const xhrData = xhrMap.get(this.xhrId);
+  xhrMap.set(this.xhrId, xhrData);
 
-      // Response headers
-      const responseHeaders = this.getAllResponseHeaders().split('\r\n').map(header => {
-        const split = header.split(/:(.*)/s);
-        return { name: split[0], value: split[1] }
-      });
+  this.addEventListener('load', function () {
+    const xhrData = xhrMap.get(this.xhrId);
 
-      xhrData.responseHeaders = responseHeaders;
-
-      // Response body
-      if (this.responseType === 'json') {
-        xhrData.response = this.response;
-      } else {
-        try {
-          xhrData.response = JSON.parse(this.responseText);
-        } catch (err) {
-          xhrData.response = this.responseText;
-        }
-      }
-
-      xhrMap.set(this.xhrId, xhrData);
-      console.log(xhrData);
+    // Set Response Headers
+    const responseHeaders = this.getAllResponseHeaders().split('\r\n').map(header => {
+      const split = header.split(/:(.*)/s);
+      return { name: split[0], value: split[1] }
     });
 
-    origOpen.apply(this, arguments);
-  };
+    xhrData.responseHeaders = responseHeaders;
 
-
-  const origSend = XMLHttpRequest.prototype.send;
-  XMLHttpRequest.prototype.send = function () {
-    const xhrData = xhrMap.get(this.xhrId);
-
-    const body = arguments[0];
-    try {
-      xhrData.body = JSON.parse(body);
-    } catch (err) {
-      xhrData = body;
+    // Set Response Body
+    if (this.responseType === 'json') {
+      xhrData.responseBody = this.response;
+    } else {
+      try {
+        xhrData.responseBody = JSON.parse(this.responseText);
+      } catch (err) {
+        xhrData.responseBody = this.responseText;
+      }
     }
+
     xhrMap.set(this.xhrId, xhrData);
 
-    origSend.apply(this, arguments);
-  };
+    // Send data
+    sendData('xhr', xhrData);
+  });
 
+  origOpen.apply(this, arguments);
+};
 
-  const origSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
-  XMLHttpRequest.prototype.setRequestHeader = function () {
-    const xhrData = xhrMap.get(this.xhrId);
+// Set Request Body
+const origSend = XMLHttpRequest.prototype.send;
+XMLHttpRequest.prototype.send = function () {
+  const xhrData = xhrMap.get(this.xhrId);
 
-    xhrData.requestHeaders = xhrData.requestHeaders || [];
-    xhrData.requestHeaders.push({ name: arguments[0], value: arguments[1] });
-    xhrMap.set(this.xhrId, xhrData);
+  const requestBody = arguments[0];
+  try {
+    xhrData.requestBody = JSON.parse(requestBody);
+  } catch (err) {
+    xhrData = requestBody;
+  }
+  xhrMap.set(this.xhrId, xhrData);
 
-    origSetRequestHeader.apply(this, arguments);
-  };
+  origSend.apply(this, arguments);
+};
 
+// Set Request Headers
+const origSetRequestHeader = XMLHttpRequest.prototype.setRequestHeader;
+XMLHttpRequest.prototype.setRequestHeader = function () {
+  const xhrData = xhrMap.get(this.xhrId);
 
-  // const origOnReadyStateChange = XMLHttpRequest.prototype.onreadystatechange;
-  // XMLHttpRequest.prototype.onreadystatechange = function () {
-  //   if (this.readyState == this.DONE && this.status == 200) {
-  //     const xhrData = xhrMap.get(this.xhrId);
+  xhrData.requestHeaders = xhrData.requestHeaders || [];
+  xhrData.requestHeaders.push({ name: arguments[0], value: arguments[1] });
+  xhrMap.set(this.xhrId, xhrData);
 
-  //     if (this.responseType === 'json') {
-  //       xhrData.response = this.response;
-  //     } else {
-  //       try {
-  //         xhrData.response = JSON.parse(this.responseText);
-  //       } catch (err) {
-  //         xhrData.response = this.responseText;
-  //       }
-  //     }
-
-  //     xhrMap.set(this.xhrId, xhrData);
-  //   }
-
-  //   origOnReadyStateChange.apply(this, arguments);
-  // };
-})();
+  origSetRequestHeader.apply(this, arguments);
+};
